@@ -15,10 +15,10 @@ JSON schema:
 """
 
 import json
-from bisect import bisect_right
 
+from . import sampling
 from .format import NAME_TO_PROP, PROP_COMPONENTS, PROP_ROTATION
-from .qmath import lerp, q_norm, q_slerp
+from .qmath import q_norm
 
 
 class SourceError(Exception):
@@ -151,36 +151,19 @@ def parse_source(doc):
 
 
 def sample_track_values(times, values, prop, t_ticks):
-    """Sample one track at time t (ticks). Lerp for translation/scale,
-    slerp with hemisphere fix for rotation. Clamps at both ends."""
-    if t_ticks <= times[0]:
-        return list(values[0])
-    if t_ticks >= times[-1]:
-        return list(values[-1])
-    i = bisect_right(times, t_ticks) - 1
-    t0, t1 = times[i], times[i + 1]
-    f = (t_ticks - t0) / (t1 - t0)
-    a, b = values[i], values[i + 1]
-    if prop == PROP_ROTATION:
-        return q_slerp(a, b, f)
-    return lerp(a, b, f)
+    """Sample one track at time t (ticks) through the shared sampler.
+
+    Lerp for translation/scale, slerp with hemisphere fix for rotation;
+    clamped at both ends. This uses the same implementation as decoded-key
+    verification so preview and playback cannot drift.
+    """
+    return sampling.sample_keys(times, values, prop, t_ticks)
 
 
 def sample_pose(anim, t_ticks):
     """Full local pose (t, r, s) per joint at time t (ticks)."""
-    pose = []
-    for i, j in enumerate(anim.joints):
-        t = list(j.bind_t)
-        r = list(j.bind_r)
-        s = list(j.bind_s)
-        tr = anim.track_map.get((i, 0))
-        if tr:
-            t = sample_track_values(tr.times, tr.values, 0, t_ticks)
-        tr = anim.track_map.get((i, 1))
-        if tr:
-            r = sample_track_values(tr.times, tr.values, 1, t_ticks)
-        tr = anim.track_map.get((i, 2))
-        if tr:
-            s = sample_track_values(tr.times, tr.values, 2, t_ticks)
-        pose.append((t, r, s))
-    return pose
+    def curve_for(i, prop):
+        tr = anim.track_map.get((i, prop))
+        return sampling.source_curve(tr) if tr else None
+
+    return sampling.sample_pose(anim.joints, curve_for, t_ticks)

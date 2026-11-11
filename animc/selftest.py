@@ -5,16 +5,20 @@ exactness, const/short-track encodings, and rejection of corrupt files
 import struct
 
 from . import samplegen
+from .compression import compress
 from .decoder import decode, sample_pose, track_value_at
 from .encoder import encode
+from .error_metrics import ErrorBudget
 from .format import (
     ENC_CONST,
     ENC_KEYS,
     FormatError,
     PROP_ROTATION,
 )
-from .qmath import q_angle_deg, q_norm
+from .qmath import q_angle_deg
 from .source import parse_source
+
+BUDGET = ErrorBudget(pos=0.01, rot_deg=0.25, scale=0.005)
 
 
 def _expect_format_error(data, what, failures):
@@ -62,7 +66,9 @@ def run():
     # --- roundtrip + const/short-track encodings -----------------------------
     for name, doc in clips.items():
         src = parse_source(doc)
-        data, stats = encode(src)
+        data, stats = compress(src, BUDGET, 16)
+        legacy, _ = encode(src)
+        check(legacy == data, f"{name}: legacy encode adapter diverged from compress")
         dec = decode(data)
         check(len(dec.joints) == len(src.joints), f"{name}: joint count mismatch")
         check(len(dec.tracks) == len(src.tracks), f"{name}: track count mismatch")
@@ -72,7 +78,7 @@ def run():
             check(len(pose) == len(dec.joints), f"{name}: bad pose at {k}")
 
     src = parse_source(clips["slow_head_turn"])
-    data, _ = encode(src)
+    data, _ = compress(src, BUDGET, 16)
     dec = decode(data)
     enc_by_prop = {}
     for tr in dec.tracks:
@@ -98,7 +104,7 @@ def run():
 
     # --- hemisphere handling on the sign-flipped half-turn clip -------------
     src = parse_source(clips["half_turn"])
-    data, _ = encode(src)
+    data, _ = compress(src, BUDGET, 16)
     dec = decode(data)
     prev = None
     worst_step = 0.0
@@ -177,7 +183,7 @@ def run():
     _expect_format_error(bytes(bad), "illegal parent index", failures)
 
     # --- 8-bit quantization path also works ----------------------------------
-    data8, _ = encode(parse_source(clips["fast_wave"]), bits=8)
+    data8, _ = compress(parse_source(clips["fast_wave"]), BUDGET, 8)
     dec8 = decode(data8)
     check(all(t.bits == 8 or t.encoding == ENC_CONST for t in dec8.tracks),
           "8-bit encode did not produce 8-bit tracks")

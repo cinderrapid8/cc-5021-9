@@ -5,9 +5,8 @@ validates every field before use. Any corrupt length or illegal index raises
 FormatError before any pose is produced.
 """
 
-from bisect import bisect_right
-
 from . import format as fmt
+from . import sampling
 from .format import (
     ENC_CONST,
     ENC_KEYS,
@@ -20,7 +19,7 @@ from .format import (
     FormatError,
     Reader,
 )
-from .qmath import lerp, q_norm, q_slerp
+from .qmath import q_norm
 
 
 class Joint:
@@ -184,41 +183,21 @@ def decode(data):
 
 
 def track_value_at(tr, t_ticks):
-    if tr.encoding == ENC_CONST:
-        return list(tr.const_value)
-    times = tr.times
-    if t_ticks <= times[0]:
-        v = tr.dequant(0)
-        return q_norm(v) if tr.prop == PROP_ROTATION else v
-    if t_ticks >= times[-1]:
-        v = tr.dequant(tr.key_count - 1)
-        return q_norm(v) if tr.prop == PROP_ROTATION else v
-    i = bisect_right(times, t_ticks) - 1
-    f = (t_ticks - times[i]) / (times[i + 1] - times[i])
-    a = tr.dequant(i)
-    b = tr.dequant(i + 1)
-    if tr.prop == PROP_ROTATION:
-        return q_slerp(q_norm(a), q_norm(b), f)
-    return lerp(a, b, f)
+    """Decoded track value at t (ticks), via the shared sampler.
+
+    The curve view applies dequantization and rotation normalization; all
+    interpolation and endpoint-clamping rules live in sampling.py, matching
+    the editing preview path.
+    """
+    return sampling.decoded_curve(tr).sample(t_ticks)
 
 
 def sample_pose(anim, t_ticks):
     """Full local pose (t, r, s) per joint at time t (ticks)."""
-    if anim.loops and anim.duration_ticks > 0:
-        t_ticks = t_ticks % anim.duration_ticks
-    else:
-        t_ticks = min(max(t_ticks, 0.0), float(anim.duration_ticks))
-    pose = []
-    for i, j in enumerate(anim.joints):
-        t, r, s = list(j.bind_t), list(j.bind_r), list(j.bind_s)
-        tr = anim.track_map.get((i, 0))
-        if tr:
-            t = track_value_at(tr, t_ticks)
-        tr = anim.track_map.get((i, 1))
-        if tr:
-            r = track_value_at(tr, t_ticks)
-        tr = anim.track_map.get((i, 2))
-        if tr:
-            s = track_value_at(tr, t_ticks)
-        pose.append((t, r, s))
-    return pose
+    t = sampling.resolve_time(t_ticks, anim.loops, anim.duration_ticks)
+
+    def curve_for(i, prop):
+        tr = anim.track_map.get((i, prop))
+        return sampling.decoded_curve(tr) if tr else None
+
+    return sampling.sample_pose(anim.joints, curve_for, t)

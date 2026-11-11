@@ -4,7 +4,8 @@ shows up as the large tip deviation it actually causes."""
 
 from . import decoder as dec_mod
 from . import source as src_mod
-from .format import PROP_NAMES, PROP_ROTATION
+from .error_metrics import ERROR_SPACES
+from .format import PROP_NAMES
 from .qmath import m_mul, m_point, q_angle_deg, trs_mat4, v_dist
 
 
@@ -54,7 +55,7 @@ def evaluate(src, dec, eval_hz=240.0, end_joints=None):
                 continue
             a = src_mod.sample_track_values(strack.times, strack.values, tr.prop, t_ticks)
             b = dec_mod.track_value_at(tr, t_ticks)
-            err = q_angle_deg(a, b) if tr.prop == PROP_ROTATION else v_dist(a, b)
+            err = ERROR_SPACES[tr.prop].distance(a, b)
             if err > local_max[tr.prop]:
                 local_max[tr.prop] = err
                 local_worst[tr.prop] = (

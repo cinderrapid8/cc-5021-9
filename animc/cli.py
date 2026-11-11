@@ -15,8 +15,10 @@ import sys
 import time
 
 from . import samplegen, selftest
+from .compression import compress
 from .decoder import decode, sample_pose
-from .encoder import encode, raw_f32_size
+from .encoder import raw_f32_size
+from .error_metrics import ErrorBudget
 from .evaluate import evaluate
 from .format import FormatError, PROP_NAMES
 from .source import SourceError, load_source
@@ -43,8 +45,8 @@ def _time_decode(data, repeats=30):
 
 def _report_one(src_path, out_dir, args):
     src = load_source(src_path)
-    data, stats = encode(src, pos_tol=args.pos_tol, rot_tol_deg=args.rot_tol,
-                         scale_tol=args.scale_tol, bits=args.bits)
+    budget = ErrorBudget(args.pos_tol, args.rot_tol, args.scale_tol)
+    data, stats = compress(src, budget, args.bits)
     dec = decode(data)
     metrics = evaluate(src, dec, eval_hz=args.eval_hz)
     decode_ms = _time_decode(data)
@@ -131,8 +133,8 @@ def _cmd_report(args):
 
 def _cmd_encode(args):
     src = load_source(getattr(args, "in"))
-    data, stats = encode(src, pos_tol=args.pos_tol, rot_tol_deg=args.rot_tol,
-                         scale_tol=args.scale_tol, bits=args.bits)
+    budget = ErrorBudget(args.pos_tol, args.rot_tol, args.scale_tol)
+    data, stats = compress(src, budget, args.bits)
     with open(args.out, "wb") as f:
         f.write(data)
     print(f"{args.out}: {len(data)} bytes "
