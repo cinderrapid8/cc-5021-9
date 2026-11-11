@@ -1,0 +1,22 @@
+[
+ {
+  "name": "fast_wave",
+  "source": "../samples/fast_wave.json",
+  "compressed": "fast_wave.acmp"
+ },
+ {
+  "name": "half_turn",
+  "source": "../samples/half_turn.json",
+  "compressed": "half_turn.acmp"
+ },
+ {
+  "name": "long_chain",
+  "source": "../samples/long_chain.json",
+  "compressed": "long_chain.acmp"
+ },
+ {
+  "name": "slow_head_turn",
+  "source": "../samples/slow_head_turn.json",
+  "compressed": "slow_head_turn.acmp"
+ }
+]

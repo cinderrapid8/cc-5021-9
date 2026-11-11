@@ -1,0 +1,150 @@
+{
+ "clips": [
+  {
+   "name": "fast_wave",
+   "source_json_bytes": 27164,
+   "raw_f32_bytes": 7555,
+   "acmp_bytes": 3049,
+   "ratio_vs_raw_f32": 2.4778615939652346,
+   "keys_before": 363,
+   "keys_after": 221,
+   "tracks": 3,
+   "decode_ms_full_clip": 0.7947652668614561,
+   "local_max_error": {
+    "translation": 0.0,
+    "rotation": 0.18074455390235686,
+    "scale": 0.0
+   },
+   "local_worst": {
+    "translation": null,
+    "rotation": [
+     "wrist",
+     "rotation",
+     0.65
+    ],
+    "scale": null
+   },
+   "end_joints": [
+    {
+     "joint": "finger_tip",
+     "max_pos_error": 0.0009678650800921127,
+     "max_pos_error_time_s": 0.2833333333333333,
+     "max_rot_error_deg": 0.18108707720749675,
+     "max_rot_error_time_s": 1.65
+    }
+   ]
+  },
+  {
+   "name": "half_turn",
+   "source_json_bytes": 9855,
+   "raw_f32_bytes": 2674,
+   "acmp_bytes": 614,
+   "ratio_vs_raw_f32": 4.355048859934853,
+   "keys_before": 122,
+   "keys_after": 26,
+   "tracks": 2,
+   "decode_ms_full_clip": 0.5030652673061315,
+   "local_max_error": {
+    "translation": 0.0,
+    "rotation": 0.246391209594649,
+    "scale": 0.0
+   },
+   "local_worst": {
+    "translation": null,
+    "rotation": [
+     "torso",
+     "rotation",
+     0.5666666666666667
+    ],
+    "scale": null
+   },
+   "end_joints": [
+    {
+     "joint": "reach_tip",
+     "max_pos_error": 0.0014952190316022075,
+     "max_pos_error_time_s": 1.8333333333333333,
+     "max_rot_error_deg": 0.244770873810071,
+     "max_rot_error_time_s": 1.8333333333333333
+    }
+   ]
+  },
+  {
+   "name": "long_chain",
+   "source_json_bytes": 132894,
+   "raw_f32_bytes": 36902,
+   "acmp_bytes": 2126,
+   "ratio_vs_raw_f32": 17.357478833490124,
+   "keys_before": 1812,
+   "keys_after": 88,
+   "tracks": 12,
+   "decode_ms_full_clip": 6.721129166544415,
+   "local_max_error": {
+    "translation": 0.0,
+    "rotation": 0.2496289764795237,
+    "scale": 0.0
+   },
+   "local_worst": {
+    "translation": null,
+    "rotation": [
+     "j7",
+     "rotation",
+     3.466666666666667
+    ],
+    "scale": null
+   },
+   "end_joints": [
+    {
+     "joint": "j11",
+     "max_pos_error": 0.03905929934330831,
+     "max_pos_error_time_s": 0.3333333333333333,
+     "max_rot_error_deg": 1.1670986423819776,
+     "max_rot_error_time_s": 2.1
+    }
+   ]
+  },
+  {
+   "name": "slow_head_turn",
+   "source_json_bytes": 31115,
+   "raw_f32_bytes": 9032,
+   "acmp_bytes": 816,
+   "ratio_vs_raw_f32": 11.068627450980392,
+   "keys_before": 485,
+   "keys_after": 38,
+   "tracks": 5,
+   "decode_ms_full_clip": 1.0944819339783862,
+   "local_max_error": {
+    "translation": 1.1920928966180355e-08,
+    "rotation": 0.24405332085422773,
+    "scale": 0.0
+   },
+   "local_worst": {
+    "translation": [
+     "spine",
+     "translation",
+     0.0
+    ],
+    "rotation": [
+     "neck",
+     "rotation",
+     1.1333333333333333
+    ],
+    "scale": null
+   },
+   "end_joints": [
+    {
+     "joint": "head_tip",
+     "max_pos_error": 0.0012855861948917046,
+     "max_pos_error_time_s": 0.16666666666666666,
+     "max_rot_error_deg": 0.46036788829509534,
+     "max_rot_error_time_s": 0.16666666666666666
+    }
+   ]
+  }
+ ],
+ "tolerances": {
+  "pos": 0.01,
+  "rot_deg": 0.25,
+  "scale": 0.005
+ },
+ "bits": 16
+}

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>animc viewer - original vs decoded</title>
+<style>
+  body { font: 13px/1.4 system-ui, sans-serif; margin: 0; background: #1c1f24; color: #dde; }
+  #bar { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: #262a31; flex-wrap: wrap; }
+  #bar select, #bar button { background: #333943; color: #dde; border: 1px solid #4a5160; border-radius: 4px; padding: 3px 8px; }
+  #bar button { cursor: pointer; }
+  #err { display: none; background: #5a1f1f; color: #ffd7d7; padding: 8px 12px; white-space: pre-wrap; }
+  #stage { display: block; width: 100vw; height: calc(100vh - 96px); }
+  #hud { padding: 4px 12px; background: #262a31; font-family: ui-monospace, monospace; white-space: pre-wrap; }
+  input[type=range] { width: 260px; }
+  .legend b.orig { color: #9aa3ad; } .legend b.dec { color: #4fe08a; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <label>clip <select id="clip"></select></label>
+  <button id="play">pause</button>
+  <button id="stepBack">&lt; frame</button>
+  <button id="stepFwd">frame &gt;</button>
+  <input id="frame" type="range" min="0" max="100" value="0">
+  <span id="frameLabel"></span>
+  <label><input id="sideBySide" type="checkbox"> side by side</label>
+  <span class="legend">original <b class="orig">gray</b> / decoded <b class="dec">green</b>, end joints orange</span>
+</div>
+<div id="err"></div>
+<canvas id="stage"></canvas>
+<div id="hud"></div>
+<script src="acmp.js"></script>
+<script>
+'use strict';
+const { FormatError, decodeAcmp, samplePose, fkWorld, worldPos, sampleSourcePose } = window.acmp;
+
+const state = {
+  manifest: null, clip: null, src: null, dec: null,
+  frame: 0, playing: true, lastT: 0, acc: 0,
+  cam: { yaw: 0.6, pitch: 0.25, dist: 3.2, cx: 0, cy: 1, cz: 0 },
+};
+
+const $ = id => document.getElementById(id);
+const canvas = $('stage'), ctx = canvas.getContext('2d');
+
+// ---- source (uncompressed JSON) joints adapter; sampling lives in acmp.js
+const srcJoints = src => src.joints.map(j => ({ name: j.name, parent: j.parent }));
+const srcPose = (src, t) => sampleSourcePose(src, t);
+
+// ---- loading
+async function loadClip(entry) {
+  $('err').style.display = 'none';
+  state.dec = null; state.src = null;
+  const [srcJson, acmpBuf] = await Promise.all([
+    fetch('../out/' + entry.source).then(r => r.json()),
+    fetch('../out/' + entry.compressed).then(r => r.arrayBuffer()),
+  ]);
+  let dec;
+  try {
+    dec = decodeAcmp(acmpBuf);   // strict: corrupt files never reach rendering
+  } catch (e) {
+    if (e instanceof FormatError) {
+      const err = $('err');
+      err.textContent = `REJECTED ${entry.compressed}: ${e.message}`;
+      err.style.display = 'block';
+      draw(); // draws "no valid data" placeholder only
+      return;
+    }
+    throw e;
+  }
+  state.src = srcJson;
+  state.dec = dec;
+  state.frame = 0;
+  const slider = $('frame');
+  slider.max = dec.durationTicks;
+  slider.value = 0;
+  // center camera on the source skeleton at frame 0
+  const ws = fkWorld(srcJoints(srcJson), srcPose(srcJson, 0));
+  const pts = ws.map(worldPos);
+  const c = pts.reduce((a, p) => [a[0] + p[0], a[1] + p[1], a[2] + p[2]], [0, 0, 0]).map(v => v / pts.length);
+  state.cam.cx = c[0]; state.cam.cy = c[1]; state.cam.cz = c[2];
+  const r = Math.max(...pts.map(p => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2])), 0.4);
+  state.cam.dist = r * 3.2;
+}
+
+// ---- rendering
+function project(p) {
+  const { yaw, pitch, dist, cx, cy, cz } = state.cam;
+  let x = p[0] - cx, y = p[1] - cy, z = p[2] - cz;
+  const cyw = Math.cos(yaw), syw = Math.sin(yaw);
+  const x1 = cyw * x + syw * z, z1 = -syw * x + cyw * z;
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const y1 = cp * y - sp * z1, z2 = sp * y + cp * z1;
+  const zz = z2 + dist;
+  const f = (canvas.height * 1.1) / Math.max(zz, 0.05);
+  return [canvas.width / 2 + x1 * f, canvas.height / 2 - y1 * f, zz];
+}
+
+function drawSkeleton(joints, pose, color, tipColor, endIdx, xOff) {
+  const worlds = fkWorld(joints, pose);
+  const pts = worlds.map(worldPos).map(p => {
+    const q = project([p[0] + xOff, p[1], p[2]]);
+    return q;
+  });
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  joints.forEach((j, i) => {
+    if (j.parent < 0) return;
+    ctx.moveTo(pts[j.parent][0], pts[j.parent][1]);
+    ctx.lineTo(pts[i][0], pts[i][1]);
+  });
+  ctx.stroke();
+  joints.forEach((j, i) => {
+    ctx.fillStyle = endIdx.has(i) ? tipColor : color;
+    ctx.beginPath();
+    ctx.arc(pts[i][0], pts[i][1], endIdx.has(i) ? 5 : 3, 0, 7);
+    ctx.fill();
+  });
+  return pts;
+}
+
+function draw() {
+  canvas.width = canvas.clientWidth * devicePixelRatio;
+  canvas.height = canvas.clientHeight * devicePixelRatio;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!state.dec || !state.src) {
+    ctx.fillStyle = '#889';
+    ctx.font = `${14 * devicePixelRatio}px monospace`;
+    ctx.fillText('no valid animation loaded', 20, 30);
+    $('hud').textContent = '';
+    return;
+  }
+  const t = state.frame;
+  const poseS = srcPose(state.src, t);
+  const poseD = samplePose(state.dec, t);
+  const jS = srcJoints(state.src);
+  const endIdx = new Set(state.src.joints.map((j, i) => i)
+    .filter(i => !state.src.joints.some(j => j.parent === i)));
+  const sep = $('sideBySide').checked ? 0.9 : 0;
+  drawSkeleton(jS, poseS, '#9aa3ad', '#e0a04f', endIdx, -sep);
+  drawSkeleton(state.dec.joints, poseD, '#4fe08a', '#e0a04f', endIdx, sep);
+
+  // live end-joint deviation at this frame
+  const wS = fkWorld(jS, poseS), wD = fkWorld(state.dec.joints, poseD);
+  let lines = [];
+  for (const i of endIdx) {
+    const a = worldPos(wS[i]), b = worldPos(wD[i]);
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    lines.push(`${state.src.joints[i].name}: |orig-dec| = ${d.toFixed(6)}`);
+  }
+  $('frameLabel').textContent = `frame ${t.toFixed(0)}/${state.dec.durationTicks}`;
+  $('hud').textContent =
+    `t = ${(t / state.dec.ticksPerSecond).toFixed(3)}s   ` +
+    `(${state.dec.ticksPerSecond} ticks/s, loops=${state.dec.loops})\n` + lines.join('\n');
+}
+
+// ---- main loop
+function tick(now) {
+  if (state.playing && state.dec) {
+    const dt = Math.min((now - state.lastT) / 1000, 0.1);
+    state.acc += dt * state.dec.ticksPerSecond;
+    const step = Math.floor(state.acc);
+    if (step > 0) {
+      state.acc -= step;
+      state.frame += step;
+      if (state.frame > state.dec.durationTicks) state.frame = state.dec.loops ? 0 : state.dec.durationTicks;
+      $('frame').value = state.frame;
+    }
+  }
+  state.lastT = now;
+  draw();
+  requestAnimationFrame(tick);
+}
+
+// ---- events
+$('frame').addEventListener('input', e => { state.frame = +e.target.value; state.playing = false; $('play').textContent = 'play'; });
+$('play').addEventListener('click', () => { state.playing = !state.playing; $('play').textContent = state.playing ? 'pause' : 'play'; });
+$('stepBack').addEventListener('click', () => { state.frame = Math.max(0, state.frame - 1); $('frame').value = state.frame; });
+$('stepFwd').addEventListener('click', () => { state.frame = Math.min(+($('frame').max), state.frame + 1); $('frame').value = state.frame; });
+$('sideBySide').addEventListener('change', draw);
+
+let drag = null;
+canvas.addEventListener('mousedown', e => { drag = { x: e.clientX, y: e.clientY }; });
+window.addEventListener('mouseup', () => { drag = null; });
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  state.cam.yaw += (e.clientX - drag.x) * 0.01;
+  state.cam.pitch = Math.max(-1.5, Math.min(1.5, state.cam.pitch + (e.clientY - drag.y) * 0.01));
+  drag = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.cam.dist = Math.max(0.3, state.cam.dist * (1 + Math.sign(e.deltaY) * 0.1));
+}, { passive: false });
+
+// ---- boot
+(async () => {
+  const manifest = await fetch('../out/manifest.json').then(r => r.json());
+  state.manifest = manifest;
+  const sel = $('clip');
+  for (const entry of manifest) {
+    const opt = document.createElement('option');
+    opt.value = entry.name; opt.textContent = entry.name;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => loadClip(manifest.find(m => m.name === sel.value)));
+  await loadClip(manifest[0]);
+  requestAnimationFrame(tick);
+})().catch(e => {
+  const err = $('err');
+  err.textContent = 'failed to load: ' + e.message + '\n(serve the repo root, e.g. `python3 -m http.server`, then open /viewer/)';
+  err.style.display = 'block';
+});
+</script>
+</body>
+</html>
